@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "kind": "workflow-pack",
+  "name": "adaptive-instruction",
+  "description": "Evidence-led adaptive instructional writing with parallel editorial reviews and author approval",
+  "compatibility": {
+    "archon": ">=0.13.0"
+  },
+  "entrypoints": {
+    "adaptive-instruction": "adaptive-instruction/adaptive-instruction.yaml"
+  }
+}

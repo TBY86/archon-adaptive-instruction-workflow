@@ -1,0 +1,173 @@
+name: adaptive-instruction-community
+description: Research a section, develop level-appropriate material, run two independent editorial branches, synthesize, and request author approval without altering the project.
+provider: codex
+mutates_checkout: false
+nodes:
+  - id: inspect
+    mutates_checkout: false
+    prompt: |-
+      You are an instructional editor preparing a proposed manuscript, not modifying files.
+      Read the author's request: $USER_MESSAGE
+      Inspect the target project's instructional manuscript and relevant context. Identify
+      source files, approved text, subject, audience, structure and protected material.
+      Do not rewrite existing approved foundation material or modify repository files.
+      Report exact file references and any missing information.
+
+  - id: hierarchy
+    depends_on: [inspect]
+    mutates_checkout: false
+    prompt: |-
+      Construct a content hierarchy from the inspected materials: $inspect.output
+      State the beginner baseline, genuinely additional intermediate objectives,
+      advanced original-source and reasoning objectives, and later-section boundaries.
+      Distinguish author requirements from reasonable proposals. Do not modify files.
+
+  - id: research
+    depends_on: [hierarchy]
+    mutates_checkout: false
+    mcp:
+      path: .archon/mcp/adaptive-research.json
+      optional: true
+    prompt: |-
+      Research only the objectives in $hierarchy.output.
+      Look for competent original documents, primary/secondary/tertiary sources,
+      precise passages, dates, translations and counterevidence. Use configured MCP
+      search tools if present; otherwise use available native research and repository
+      materials. No invented quotations or citations. Mark unverifiable leads clearly.
+      Do not modify files.
+
+  - id: boundaries
+    depends_on: [hierarchy]
+    mutates_checkout: false
+    prompt: |-
+      Independently audit the instructional scope in $hierarchy.output.
+      Identify approved baseline passages, protected authorial positions and topics
+      reserved for later modules. Require meaningful intermediate and advanced depth.
+      Treat historical inference and pastoral application as different claim types.
+      Do not modify files.
+
+  - id: qualify-evidence
+    depends_on: [research, boundaries]
+    mutates_checkout: false
+    prompt: |-
+      Qualify evidence, refusing unsupported certainty. Research: $research.output
+      Scope constraints: $boundaries.output
+      Return a usable evidence-and-boundary brief with exact source locators, open
+      questions, and which claims must be qualified. No invented support.
+      Do not modify files.
+
+  - id: write-review-a
+    depends_on: [qualify-evidence]
+    provider: codex
+    loop_group:
+      max_iterations: 3
+      fresh_context: true
+      until_bash: 'test $editorA.output.approved = true'
+      nodes:
+        - id: writerA
+          mutates_checkout: false
+          mcp:
+            path: .archon/mcp/adaptive-voice.json
+            optional: true
+          prompt: |-
+            Produce a complete proposed intermediate/advanced manuscript in the
+            author's own established voice, not a plan. Respect the baseline, scope,
+            evidence distinctions, and pedagogical progression in:
+            $qualify-evidence.output
+            Previous proposed manuscript: $LOOP_PREV.editorA.output.manuscript
+            Previous independent review: $LOOP_PREV.editorA.output.notes
+            Consult the target project's authorized writing-style references. If a
+            voice MCP is available use it, otherwise apply existing approved samples.
+            Do not alter project files. Return the full manuscript.
+        - id: editorA
+          depends_on: [writerA]
+          mutates_checkout: false
+          mcp:
+            path: .archon/mcp/adaptive-voice.json
+            optional: true
+          output_format:
+            type: object
+            properties:
+              approved: { type: boolean }
+              manuscript: { type: string }
+              notes: { type: string }
+            required: [approved, manuscript, notes]
+            additionalProperties: false
+          prompt: |-
+            Independently edit the full draft for author voice, instruction quality,
+            verified evidence, theological-historical distinctions and scope.
+            Draft: $writerA.output
+            Constraints: $qualify-evidence.output
+            Return a JSON object with approved (true only if publishable subject to
+            author approval), manuscript (the COMPLETE edited manuscript), and notes
+            (specific remaining corrections). No changes to project files.
+
+  - id: write-review-b
+    depends_on: [qualify-evidence]
+    provider: codex
+    loop_group:
+      max_iterations: 3
+      fresh_context: true
+      until_bash: 'test $editorB.output.approved = true'
+      nodes:
+        - id: writerB
+          mutates_checkout: false
+          prompt: |-
+            Independently draft COMPLETE intermediate and advanced instruction,
+            developing a richer historical narrative without unsupported claims.
+            Evidence and boundaries: $qualify-evidence.output
+            Previous proposed manuscript: $LOOP_PREV.editorB.output.manuscript
+            Previous independent review: $LOOP_PREV.editorB.output.notes
+            Use the target project's approved prose guidelines. Do not modify files.
+        - id: editorB
+          depends_on: [writerB]
+          mutates_checkout: false
+          mcp:
+            path: .archon/mcp/adaptive-prose.json
+            optional: true
+          output_format:
+            type: object
+            properties:
+              approved: { type: boolean }
+              manuscript: { type: string }
+              notes: { type: string }
+            required: [approved, manuscript, notes]
+            additionalProperties: false
+          prompt: |-
+            Independently edit this complete manuscript for prose depth, narrative
+            coherence, originality, reading level, verifiable sources and economy.
+            Draft: $writerB.output
+            Constraints: $qualify-evidence.output
+            Use configured prose MCP tools when available. Return JSON with approved,
+            manuscript (COMPLETE edited text) and notes. Do not modify project files.
+
+  - id: assemble
+    depends_on: [write-review-a, write-review-b]
+    mutates_checkout: false
+    prompt: |-
+      Compare the COMPLETE edited manuscripts from both independent editorial paths.
+      Voice-focused review: $write-review-a.output
+      Prose-focused review: $write-review-b.output
+      Evidence and boundaries: $qualify-evidence.output
+      Synthesize the best full intermediate/advanced manuscript, preserving protected
+      source teaching, original voice and appropriate repetition. Include source
+      locators and unresolved evidence questions separately. Do not modify files.
+
+  - id: author-review
+    depends_on: [assemble]
+    wait:
+      attention: |-
+        An adaptive instructional manuscript is ready for your review. Examine the
+        proposed manuscript and its evidence before approving. Rejection makes no
+        changes to the target project's source files.
+      form: approval
+
+  - id: rejected
+    depends_on: [author-review]
+    when: "$author-review.output.decision == 'reject'"
+    cancel: Proposal rejected by the author. No manuscript was installed.
+
+  - id: accepted
+    depends_on: [author-review]
+    when: "$author-review.output.decision == 'approve'"
+    bash: 'printf "Proposal approved for separate, controlled integration. No source files changed.\n"'

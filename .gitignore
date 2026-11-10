@@ -1,0 +1,7 @@
+# Community pack contains no secrets or user artifacts.
+.env
+.env.*
+!.env.example
+.archon/workspaces/
+*.log
+__pycache__/
